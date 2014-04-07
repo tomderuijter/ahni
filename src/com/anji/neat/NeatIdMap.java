@@ -212,7 +212,6 @@ public class NeatIdMap {
 	 * @throws IOException
 	 */
 	public boolean store() throws IOException {
-		System.out.println("here");
 		if (neatIdMapFileName != null) {
 			FileWriter out = null;
 			try {

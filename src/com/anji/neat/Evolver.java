@@ -179,7 +179,6 @@ public class Evolver implements Configurable {
 
 		// persistence
 		if (props.getBooleanProperty(PERSIST_ENABLE_KEY, false)) {
-			System.out.println("\n\nhere2\n");
 			PersistenceEventListener dbListener = new PersistenceEventListener(config, run);
 			dbListener.init(props);
 			config.getEventManager().addEventListener(GeneticEvent.GENOTYPE_START_GENETIC_OPERATORS_EVENT, dbListener);
@@ -225,14 +224,14 @@ public class Evolver implements Configurable {
 			// load population, either from previous run or random
 			genotype = db.loadGenotype(config);
 			if (genotype != null) {
-				// logger.info( "genotype from previous run" );
+				logger.info( "genotype from previous run" );
 			} else {
 				genotype = Genotype.randomInitialGenotype(props, config);
-				// logger.info( "random genotype (unable to load from DB)" );
+				logger.info( "random genotype (unable to load from DB)" );
 			}
 		} else {
 			genotype = Genotype.randomInitialGenotype(props, config);
-			// logger.info( "random genotype" );
+			logger.info( "random genotype" );
 		}
 
 		// run start time

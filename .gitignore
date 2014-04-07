@@ -1,5 +1,7 @@
 db/
 bin/
+doc/
+.DS_Store
 .classpath
 .metadata
 .settings

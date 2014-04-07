@@ -585,8 +585,6 @@ public class NeatConfiguration extends Configuration implements Configurable {
 	 * @throws InvalidConfigurationException
 	 */
 	public void store() throws InvalidConfigurationException {
-		System.out.println("\n\nhere4\n");
-
 		try {
 			getIdFactory().store();
 			if (neatIdMap.store()) {
