@@ -1,14 +1,17 @@
 package com.ojcoleman.ahni.experiments.polebalancing;
 
+import java.io.BufferedWriter;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
+
 import org.jgapcustomised.Chromosome;
 
 import com.anji.integration.Activator;
-import com.anji.neat.NeatConfiguration;
-import com.ojcoleman.ahni.evaluation.BulkFitnessFunctionMT;
-import com.ojcoleman.ahni.evaluation.novelty.Behaviour;
-import com.ojcoleman.ahni.experiments.polebalancing.Cart;
-import com.ojcoleman.ahni.experiments.polebalancing.Pole;
 import com.ojcoleman.ahni.hyperneat.Properties;
+import com.ojcoleman.ahni.evaluation.novelty.Behaviour;
+import com.ojcoleman.ahni.experiments.polebalancing.Pole;
+import com.ojcoleman.ahni.evaluation.BulkFitnessFunctionMT;
 
 /**
  * 
@@ -36,8 +39,6 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 	double cartPosX, cartPosY, cartVelX, cartVelY, initPoleAngle, initPoleVel;
 	
 	TwoDimCart cart;
-	
-	boolean biasViaInput = false;	// TODO: keep or not?
 
 	public TwoDimPoleBalancing() {
 	}
@@ -98,21 +99,52 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 	
 	@Override
 	protected void evaluate(Chromosome genotype, Activator substrate, int evalThreadIndex, double[] fitnessValues, Behaviour[] behaviours) {
-		_evaluate(genotype, substrate, null, false, false, fitnessValues, behaviours);
+		try {
+			_evaluate(genotype, substrate, null, false, false, fitnessValues, behaviours);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 	
 	@Override
 	public void evaluate(Chromosome genotype, Activator substrate, String baseFileName, boolean logText, boolean logImage) {
-		_evaluate(genotype, substrate, baseFileName, logText, logImage, null, null);
+		try {
+			_evaluate(genotype, substrate, baseFileName, logText, logImage, null, null);
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 	
-	public void _evaluate(Chromosome genotype, Activator substrate, String baseFileName, boolean logText, boolean logImage, double[] fitnessValues, Behaviour[] behaviours) {
+	public void _evaluate(Chromosome genotype, Activator substrate, String baseFileName, boolean logText, boolean logImage, double[] fitnessValues, Behaviour[] behaviours) throws IOException { 
 
 		// Take new cart.
 		initCart();
 		double[] input;
 		int timeStep = 0;
+		
+		// Prepare objects for optional output
+		File file = null;
+		FileWriter fw = null; 
+		BufferedWriter bw = null;
+		
+		// Initialize writers for optional output
+		if(logText) {
+			file = new File(baseFileName + "positions.csv");
+			if (!file.exists()) {
+				file.createNewFile();
+			}
+
+			fw = new FileWriter(file.getAbsoluteFile());
+			bw = new BufferedWriter(fw);
+		}
+		
 		while(timeStep < maxTimeSteps && legalSolution()) {
+			
+			// Write state variables to file
+			if(logText) {
+				bw.write(outputState());
+				bw.newLine();
+			}
 			
 			// Construct network input values
 			input = convertState();
@@ -125,6 +157,30 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 			timeStep++;
 		}
 		fitness(timeStep, fitnessValues);
+		
+		// Close file logging;
+		if(logText) {
+			bw.close();
+		}
+	}
+	
+	// Writes a single line with cart and pole positions in CSV format.
+	private String outputState() {
+		
+		StringBuilder sb = new StringBuilder();
+		sb.append(cart.x.position);
+		sb.append(",");
+		sb.append(cart.y.position);
+		
+		for(int i = 0; i < cart.poleCount(); i++) {
+			sb.append(",");
+			sb.append(cart.x.poles[i].angle);
+			sb.append(",");
+			sb.append(cart.y.poles[i].angle);
+		}
+		
+		return sb.toString();
+
 	}
 	
 	// Converts cart object to form accepted by substrate
@@ -143,6 +199,7 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 			input[1] = position[y].cart / (trackLength * 0.5);
 			input[2] = velocity[x].cart / 0.75;
 			input[3] = velocity[y].cart / 0.75;
+			
 			for(int i = 0; i < cart.poleCount(); i++) {
 				input[4*i + 4] 		= position[x].poles[i] / poleAngleThreshold;
 				input[4*i + 4+1]	= position[y].poles[i] / poleAngleThreshold;
@@ -199,8 +256,6 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 		if (fitnessValues != null) {
 			fitnessValues[0] = (double) timeStep / maxTimeSteps;
 		}
-		
-		
 		
 		// TODO: Penalize with distance from center
 	}

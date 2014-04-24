@@ -37,7 +37,7 @@ import com.anji.util.Properties;
 public class PresentationEventListener implements GeneticEventListener {
 
 	/**
-	 * poperties key, directory in which to store presentation data
+	 * properties key, directory in which to store presentation data
 	 */
 	public final static String BASE_DIR_KEY = "presentation.dir";
 

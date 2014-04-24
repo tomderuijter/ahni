@@ -52,6 +52,7 @@ import com.anji.integration.TranscriberException;
 import com.ojcoleman.ahni.evaluation.AHNIFitnessFunction;
 import com.ojcoleman.ahni.event.AHNIEvent;
 import com.ojcoleman.ahni.event.AHNIEventListener;
+import com.ojcoleman.ahni.integration.SimulationPresentationListener;
 import com.ojcoleman.ahni.nn.BainNN;
 import com.ojcoleman.ahni.nn.NNAdaptor;
 import com.ojcoleman.ahni.transcriber.HyperNEATTranscriber;
@@ -89,6 +90,7 @@ public class HyperNEATEvolver implements Configurable, GeneticEventListener {
 	public static final String LOAD_GENOTYPE_KEY = "persist.load.genotype";
 	public static final String PERSIST_ENABLE_KEY = "persist.enable";
 	public static final String PRESENTATION_GENERATE_KEY = "presentation.generate";
+	public static final String PRESENTATION_SIMULATION_KEY = "presentation.simulation";
 	public static final String LOG_PER_GENERATIONS_KEY = "log.pergenerations";
 	public static final String LOG_CHAMP_TOSTRING_KEY = "log.champ.tostring";
 	public static final String LOG_CHAMP_TOIMAGE_KEY = "log.champ.toimage";
@@ -98,7 +100,7 @@ public class HyperNEATEvolver implements Configurable, GeneticEventListener {
 	private HyperNEATConfiguration config = null;
 	private List<AHNIEventListener> listeners = new ArrayList<AHNIEventListener>();
 	private Properties properties = null;
-	private NEATGenotype genotype = null;
+	private Genotype genotype = null;
 	private int numEvolutions = 0;
 	private double targetPerformance = 1;
 	private Persistence db = null;
@@ -164,10 +166,10 @@ public class HyperNEATEvolver implements Configurable, GeneticEventListener {
 		config = (HyperNEATConfiguration) props.singletonObjectProperty(HyperNEATConfiguration.class);
 		config.setBulkFitnessFunction(bulkFitnessFunc);
 
-
-		// peristence
+		// Persistence class
 		db = (Persistence) props.singletonObjectProperty(Persistence.PERSISTENCE_CLASS_KEY);
 
+		// Load genotype from file
 		loadGenotypeFromDB = props.getBooleanProperty(LOAD_GENOTYPE_KEY);
 
 		numEvolutions = props.getIntProperty(NUM_GENERATIONS_KEY);
@@ -197,7 +199,7 @@ public class HyperNEATEvolver implements Configurable, GeneticEventListener {
 			config.getEventManager().addEventListener(GeneticEvent.GENOTYPE_EVALUATED_EVENT, logListener);
 		}
 
-		// persistence
+		// Persistence
 		if (props.getBooleanProperty(PERSIST_ENABLE_KEY, false)) {
 			PersistenceEventListener dbListener = new PersistenceEventListener(config, run);
 			dbListener.init(props);
@@ -211,7 +213,8 @@ public class HyperNEATEvolver implements Configurable, GeneticEventListener {
 
 		// presentation
 		if (props.getBooleanProperty(PRESENTATION_GENERATE_KEY, false)) {
-			PresentationEventListener presListener = new PresentationEventListener(run);
+			PresentationEventListener presListener = null;
+			presListener = new PresentationEventListener(run);
 			presListener.init(props);
 			config.getEventManager().addEventListener(GeneticEvent.GENOTYPE_EVALUATED_EVENT, presListener);
 			config.getEventManager().addEventListener(GeneticEvent.RUN_COMPLETED_EVENT, presListener);
@@ -271,17 +274,19 @@ public class HyperNEATEvolver implements Configurable, GeneticEventListener {
 		bestFitnesses = new double[numEvolutions];
 		bestPerformances = new double[numEvolutions];
 
-		// TODO loading genotype from storage is broken?
-		/*if (loadGenotypeFromDB) {
+		if (loadGenotypeFromDB) {
 			// load population, either from previous run or random
 			genotype = db.loadGenotype(config);
 			if (genotype != null) {
+				logger.info("genotype from previous run");
 			} else {
 				genotype = NEATGenotype.randomInitialGenotype(properties, config);
+				logger.info("random genotype (unable to load from DB)");
 			}
-		} else {*/
+		} else {
 			genotype = NEATGenotype.randomInitialGenotype(properties, config);
-		//}
+			logger.info("random genotype");
+		}
 
 		if (logger.isDebugEnabled()) {
 			// Log CPPN represented by each initial Chromosome.
@@ -326,9 +331,8 @@ public class HyperNEATEvolver implements Configurable, GeneticEventListener {
 
 			// Perform one evolutionary generation: evaluate individuals, generate new population.
 			fittest = genotype.evolve();
-			
 			bestPerforming = genotype.getBestPerforming();
-
+			
 			// result data
 			if (bulkFitnessFunc.endRun())
 				generationOfFirstSolution = generation;
@@ -459,6 +463,7 @@ public class HyperNEATEvolver implements Configurable, GeneticEventListener {
 
 		// run finish
 		config.getEventManager().fireGeneticEvent(new GeneticEvent(GeneticEvent.RUN_COMPLETED_EVENT, genotype));
+		
 		if (properties.logFilesEnabled()) {
 			logConclusion(generationOfFirstSolution, bestPerforming);
 		}

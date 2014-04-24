@@ -204,7 +204,6 @@ public class Run {
 					FileAppender fileAppender = (FileAppender) Logger.getRootLogger().getAppender("RunLog");
 					fileAppender.setFile(runOutputDir + runLogFile);
 					fileAppender.activateOptions();
-
 				}
 			}
 
