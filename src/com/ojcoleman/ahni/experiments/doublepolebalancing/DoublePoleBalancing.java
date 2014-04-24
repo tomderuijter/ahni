@@ -1,7 +1,5 @@
 package com.ojcoleman.ahni.experiments.doublepolebalancing;
 
-import java.util.Arrays;
-
 import org.jgapcustomised.Chromosome;
 
 import com.anji.integration.Activator;
@@ -11,9 +9,10 @@ import com.ojcoleman.ahni.evaluation.novelty.Behaviour;
 /**
  * Implements the Markovian double pole balancing task (with velocities included in inputs) as described in:
  * <blockquote> Gruau, F., Whitley, D., and Pyeatt, L. (1996). A comparison between cellular encoding and direct encoding for genetic neural networks. 
- * In Genetic Programming 1996: Proceedings of the First Annual Conference, pages 81–89, MIT Press, Cambridge, Massachusetts </blockquote>
+ * In Genetic Programming 1996: Proceedings of the First Annual Conference, pages 81���89, MIT Press, Cambridge, Massachusetts </blockquote>
  * 
  * This code was adapted from SharpNEAT by Colin Green (http://sharpneat.sourceforge.net/).
+ * Additional comments were added by Tom de Ruijter (http://tom-de-ruijter.nl/).
  */
 public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 	// Some physical model constants.
@@ -25,16 +24,18 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 	protected static final double Length2 = 0.05;
 	protected static final double MassPole2 = 0.01;
 	protected static final double ForceMag = 10.0;
+	
 	/**
 	 * Time increment interval in seconds.
 	 */
 	public static final double TimeDelta = 0.01;
 	protected static final double FourThirds = 4.0 / 3.0;
 	/**
-	 * Uplifting moment?
+	 * Friction Coefficient Mu for pole hinges 
 	 */
-	protected static final double MUP = 0.000002;
+	protected static final double MUP = 0.000002;		
 	// Some useful angle constants.
+	
 	protected static final double OneDegree = Math.PI / 180.0;
 	// = 0.0174532;
 	protected static final double FourDegrees = Math.PI / 45.0;
@@ -53,13 +54,15 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 	// = 0.87266;
 	protected static final double SeventyTwoDegrees = Math.PI / 2.5;
 	// = 1.256637;
+
 	// Domain parameters.
 	double _trackLength;
 	protected double _trackLengthHalf;
 	protected int _maxTimesteps;
 	protected double _poleAngleThreshold;
+	// Maximum pole angle acceptable within simulation
 	
-	boolean biasViaInput = false;
+	boolean biasViaInput = false;						// TODO: what does this parameter do? It is set to 'True' in the .properties file. Does this come through?
 
 	/**
 	 * Construct evaluator with default task arguments/variables.
@@ -95,10 +98,14 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 		// [3] - Pole 1 angular velocity (radians/sec).
 		// [4] - Pole 2 angle (radians)
 		// [5] - Pole 2 angular velocity (radians/sec).
+		
 		double[] state = new double[6];
 		state[2] = FourDegrees;
+		// Initial pole stance
+		
 		// Run the pole-balancing simulation.
 		int timestep = 0;
+		
 		double[] input = new double[6 + (biasViaInput ? 1 : 0)];
 		if (biasViaInput) input[6] = 0.5;
 		for (; timestep < _maxTimesteps; timestep++) {
@@ -119,10 +126,18 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 			// Activate the network.
 			double[] output = substrate.next(input);
 			// Get network response and calc next timestep state.
+			// output has size 1, containing force on cart in x-axis
 			performAction(state, output[0]);
-			// Check for failure state. Has the cart run off the ends of the track or has the pole
-			// angle gone beyond the threshold.
-			if ((state[0] < -_trackLengthHalf) || (state[0] > _trackLengthHalf) || (state[2] > _poleAngleThreshold) || (state[2] < -_poleAngleThreshold) || (state[4] > _poleAngleThreshold) || (state[4] < -_poleAngleThreshold)) {
+			
+			// Check for failure state
+			// whether the cart has ran off the ends of the track or the pole angle has gone beyond the threshold.
+			// TODO : Replace half of the below statements using Math.abs()
+			if ((state[0] < -_trackLengthHalf) 
+			|| (state[0] > _trackLengthHalf) 
+			|| (state[2] > _poleAngleThreshold) 
+			|| (state[2] < -_poleAngleThreshold) 
+			|| (state[4] > _poleAngleThreshold) 
+			|| (state[4] < -_poleAngleThreshold)) {
 				break;
 			}
 		}
@@ -140,9 +155,10 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 	 * @param state Model state.
 	 * @param output Push force.
 	 */
-	protected void performAction(double[] state, double output) {
+	public void performAction(double[] state, double output) {
 		int i;
 		double[] dydx = new double[6];
+
 		for (i = 0; i < 2; ++i) {
 			// Apply action to the simulated cart-pole
 			// Runge-Kutta 4th order integration method
@@ -154,36 +170,66 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 		}
 	}
 
+	/**
+	 * Calculates the second order derivative given a force and current model state.
+	 * 
+	 * @param action Push force.
+	 * @param st Model state.
+	 * @param derivs First and second order derivatives.
+	 */
 	private void step(double action, double[] st, double[] derivs) {
 		double force, costheta_1, costheta_2, sintheta_1, sintheta_2, gsintheta_1, gsintheta_2, temp_1, temp_2, ml_1, ml_2, fi_1, fi_2, mi_1, mi_2;
+		
 		force = (action - 0.5) * ForceMag * 2;
+		
 		costheta_1 = Math.cos(st[2]);
 		sintheta_1 = Math.sin(st[2]);
 		gsintheta_1 = Gravity * sintheta_1;
+		
 		costheta_2 = Math.cos(st[4]);
 		sintheta_2 = Math.sin(st[4]);
 		gsintheta_2 = Gravity * sintheta_2;
+		
 		ml_1 = Length1 * MassPole1;
 		ml_2 = Length2 * MassPole2;
+		
 		temp_1 = MUP * st[3] / ml_1;
 		temp_2 = MUP * st[5] / ml_2;
+		
+		// Equation (5)
 		fi_1 = (ml_1 * st[3] * st[3] * sintheta_1) + (0.75 * MassPole1 * costheta_1 * (temp_1 + gsintheta_1));
 		fi_2 = (ml_2 * st[5] * st[5] * sintheta_2) + (0.75 * MassPole2 * costheta_2 * (temp_2 + gsintheta_2));
+		
+		// Equation (6)
 		mi_1 = MassPole1 * (1 - (0.75 * costheta_1 * costheta_1));
 		mi_2 = MassPole2 * (1 - (0.75 * costheta_2 * costheta_2));
+		
+		// Equation (3)
 		derivs[1] = (force + fi_1 + fi_2) / (mi_1 + mi_2 + MassCart);
+		
+		// Equation (4)
 		derivs[3] = -0.75 * (derivs[1] * costheta_1 + gsintheta_1 + temp_1) / Length1;
 		derivs[5] = -0.75 * (derivs[1] * costheta_2 + gsintheta_2 + temp_2) / Length2;
 	}
 
-	private void rk4(double f, double[] y, double[] dydx) {
+	/**
+	 * RK4 / Runge-Kutta method for approximating evaluations of ordinary differental equations.
+	 * 
+	 * @param f Push force to define function f (calculate model accelerations)
+	 * @param y Vector to update (current model state)
+	 * @param dydx Differential equations (velocities and accelerations)
+	 */
+	private void rk4(double f, double[] y, double[] dydx) {		
 		int i;
 		double hh, h6;
 		double[] dym = new double[6];
 		double[] dyt = new double[6];
 		double[] yt = new double[6];
+		
 		hh = TimeDelta * 0.5;
 		h6 = TimeDelta / 6.0;
+		
+		// Calculate k2
 		for (i = 0; i <= 5; i++) {
 			yt[i] = y[i] + (hh * dydx[i]);
 		}
@@ -191,6 +237,8 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 		dyt[0] = yt[1];
 		dyt[2] = yt[3];
 		dyt[4] = yt[5];
+		
+		// Calculate k3
 		for (i = 0; i <= 5; i++) {
 			yt[i] = y[i] + (hh * dyt[i]);
 		}
@@ -198,6 +246,8 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 		dym[0] = yt[1];
 		dym[2] = yt[3];
 		dym[4] = yt[5];
+		
+		// Calculate k4
 		for (i = 0; i <= 5; i++) {
 			yt[i] = y[i] + (TimeDelta * dym[i]);
 			dym[i] = dym[i] + dyt[i];
@@ -207,7 +257,9 @@ public class DoublePoleBalancing extends BulkFitnessFunctionMT {
 		dyt[2] = yt[3];
 		dyt[4] = yt[5];
 
+		// Approximation
 		for (i = 0; i <= 5; i++) {
+			// y' = y + h/6  * (k1 + k4 + 2(k2 + k3))
 			y[i] = y[i] + h6 * (dydx[i] + dyt[i] + 2.0 * dym[i]);
 		}
 	}

@@ -2,6 +2,7 @@ db/
 bin/
 doc/
 .DS_Store
+antbin/
 .classpath
 .metadata
 .settings
