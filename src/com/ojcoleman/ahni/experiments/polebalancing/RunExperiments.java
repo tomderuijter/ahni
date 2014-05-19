@@ -27,13 +27,12 @@ public class RunExperiments {
 	/**
 	 * @param args
 	 */
-	@SuppressWarnings("null")
 	public static void main(String[] args) {
 
 		// Arguments
-		String propPath = args[0];
-		String chromId = args[1]; // 1675
-		String outPath = args[2];
+		String propPath = "properties/three-dimensional-pole-balancing.properties"; //args[0];
+		String chromId = "3130";//args[1];
+		String outPath = "results/"; //args[2];
 		
 		try {
 			

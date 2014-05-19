@@ -10,6 +10,7 @@ import org.jgapcustomised.Chromosome;
 import com.anji.integration.Activator;
 import com.ojcoleman.ahni.hyperneat.Properties;
 import com.ojcoleman.ahni.evaluation.novelty.Behaviour;
+import com.ojcoleman.ahni.experiments.doublepolebalancing.JiggleBuffer;
 import com.ojcoleman.ahni.experiments.polebalancing.Pole;
 import com.ojcoleman.ahni.evaluation.BulkFitnessFunctionMT;
 
@@ -38,15 +39,12 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 	// Initialization parameters
 	double cartPosX, cartPosY, cartVelX, cartVelY, initPoleAngle, initPoleVel;
 	
-	TwoDimCart cart;
+//	TwoDimCart cart;
 
-	public TwoDimPoleBalancing() {
-	}
-	
 	// Initializes a cart in the specified starting position
-	public void initCart () {
+	public TwoDimCart initCart () {
 		// Initialize poles
-		double scaling = 0.5;
+		double scaling = 0.1;
 		Pole[] polesX = new Pole[poleCount];
 		Pole[] polesY = new Pole[poleCount];
 		if(poleCount > 0) {
@@ -63,7 +61,7 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 		
 		double[] position = {cartPosX,cartPosY};
 		double[] velocity = {cartVelX,cartVelY};
-		this.cart = new TwoDimCart(cartMass,cartFriction,position,velocity,polesX,polesY);
+		return new TwoDimCart(cartMass,cartFriction,position,velocity,polesX,polesY);
 	}
 	
 	@Override
@@ -118,7 +116,7 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 	public void _evaluate(Chromosome genotype, Activator substrate, String baseFileName, boolean logText, boolean logImage, double[] fitnessValues, Behaviour[] behaviours) throws IOException { 
 
 		// Take new cart.
-		initCart();
+		TwoDimCart cart = initCart();
 		double[] input;
 		int timeStep = 0;
 		
@@ -138,25 +136,37 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 			bw = new BufferedWriter(fw);
 		}
 		
-		while(timeStep < maxTimeSteps && legalSolution()) {
+		JiggleBuffer jiggleBuffer1 = null;
+		if(!includeVelocity) {
+			jiggleBuffer1 = new JiggleBuffer(100);
+		}
+		
+		while(timeStep < maxTimeSteps && legalSolution(cart)) {
 			
 			// Write state variables to file
 			if(logText) {
-				bw.write(outputState());
+				bw.write(outputState(cart));
 				bw.newLine();
 			}
 			
 			// Construct network input values
-			input = convertState();
-			
+			input = convertState(cart);
+	
 			// Clamp input to network
 			double[] output = substrate.next(input);
 			
 			// Propagate network output through cart state
 			performAction(output[0], output[1], cart);
+			
+			// Place the latest jiggle value into buffer1.
+			if (jiggleBuffer1 != null) {
+				jiggleBuffer1.enqueue(sumState(cart));
+			}
+			
 			timeStep++;
 		}
-		fitness(timeStep, fitnessValues);
+		
+		fitness(timeStep, fitnessValues, cart, jiggleBuffer1);
 		
 		// Close file logging;
 		if(logText) {
@@ -165,7 +175,7 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 	}
 	
 	// Writes a single line with cart and pole positions in CSV format.
-	private String outputState() {
+	private String outputState(TwoDimCart cart) {
 		
 		StringBuilder sb = new StringBuilder();
 		sb.append(cart.x.position);
@@ -184,12 +194,17 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 	}
 	
 	// Converts cart object to form accepted by substrate
-	private double[] convertState () {
+	private double[] convertState (TwoDimCart cart) {
 		double[] input;
 		int x = 0;
 		int y = 1;
 		
 		Derivatives[] position = cart.zeroOrder();
+		
+		// TODO Include input bias
+//		double[] input = new double[3 + (biasViaInput ? 1 : 0)];
+//		if (biasViaInput)
+//			input[3] = 0.5;
 		
 		if(includeVelocity) {
 			input = new double[4+(4*cart.poleCount())];
@@ -222,15 +237,35 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 		return input;
 	}
 	
+	// Sums the positions and velocities of the cart and the main pole
+	private double sumState(TwoDimCart cart) {
+		double sum = 0;
+		int x = 0;
+		int y = 1;
+		Derivatives[] position = cart.zeroOrder();
+		Derivatives[] velocity = cart.firstOrder();
+		
+		sum += Math.abs(position[x].cart) + Math.abs(position[y].cart);
+		sum += Math.abs(position[x].poles[0]) + Math.abs(position[y].poles[0]);
+		sum += Math.abs(velocity[x].cart) + Math.abs(velocity[y].cart);
+		sum += Math.abs(velocity[x].poles[0]) + Math.abs(position[y].poles[0]);
+		return sum;
+	}
+	
 	// Abort simulation when:
 	// - cart runs off track
 	// - pole is below threshold
-	private boolean legalSolution() {
+	private boolean legalSolution(TwoDimCart cart) {
 
 		boolean valid = cart.x.onTrack(trackLength * 0.5) && cart.y.onTrack(trackLength * 0.5);
+//		if(!valid)
+//			System.out.println("Cart went off track!");
+		
 		for(int i = 0; i < cart.poleCount(); i++) {
 			valid = valid && cart.x.poles[i].onTrack(poleAngleThreshold)
 						  && cart.y.poles[i].onTrack(poleAngleThreshold);
+//			if(!valid)
+//				System.out.println("Pole " + i + " fell down!");
 		}
 		return valid;
 	}
@@ -245,19 +280,42 @@ public class TwoDimPoleBalancing extends BulkFitnessFunctionMT {
 		for(int i = 0; i < 2; i++) {
 			Derivatives[] firstOrder = cart.firstOrder();
 			Derivatives[] secondOrder = cart.secondOrder(forceX, forceY, gravity);
-			RK4.rk4(forceX, cart.x, firstOrder[0], secondOrder[0],gravity, TimeDelta);
-			RK4.rk4(forceY, cart.y, firstOrder[1], secondOrder[1],gravity, TimeDelta);
+			RK4.rk4(forceX, cart.x, firstOrder[0], secondOrder[0], gravity, TimeDelta);
+			RK4.rk4(forceY, cart.y, firstOrder[1], secondOrder[1], gravity, TimeDelta);
 		}
 	}	
 	// Fraction of time elapsed before failure.
 	// Normalized to a continuous [0,1] domain.
-	private void fitness(double timeStep, double[] fitnessValues) {
+	private void fitness(double timeStep, double[] fitnessValues, TwoDimCart cart, JiggleBuffer jiggleBuffer1) {
 		
 		if (fitnessValues != null) {
-			fitnessValues[0] = (double) timeStep / maxTimeSteps;
+			double f1 = (double) timeStep / maxTimeSteps;
+			
+			fitnessValues[0] = f1;
+	
+			if (f1 == 1.0) {
+				fitnessValues[0] = f1;
+				return;
+			}
+			
+			double f2 = 0;
+			if(jiggleBuffer1 != null) {
+				f2 = timeStep < 100 ? 0 : 0.75 / jiggleBuffer1.getTotal();
+			}
+			
+			if(includeVelocity)
+				fitnessValues[0] = f1;
+			else
+				fitnessValues[0] = 0.1 * f1 + 0.9 * f2 ;
+			
+			// Penalize with distance from center
+			double factor = timeStep / (maxTimeSteps * 2);
+			double distanceError = factor * Math.pow((cart.x.position + cart.y.position) / (trackLength * 2),2);
+			if (distanceError < fitnessValues[0] && fitnessValues[0] != 1.0) 
+				fitnessValues[0] -= distanceError;
 		}
 		
-		// TODO: Penalize with distance from center
+
 	}
 	
 	@Override
